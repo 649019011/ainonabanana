@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { useToast } from "@/hooks/use-toast"
+import { AuthButton } from "@/components/auth-button"
 
 interface GeneratedImage {
   id: string
@@ -180,7 +181,10 @@ export default function HomePage() {
               <div className="text-3xl">🍌</div>
               <h1 className="text-2xl font-bold">Nano Banana</h1>
             </div>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">Try Now</Button>
+            <div className="flex items-center gap-2">
+              <AuthButton />
+              <Button className="bg-primary text-primary-foreground hover:bg-primary/90">Try Now</Button>
+            </div>
           </div>
         </div>
       </header>

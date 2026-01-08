@@ -31,6 +31,7 @@
 
 ## Security & Configuration Tips
 - Store secrets in `.env.local` (ignored by `.gitignore`). The API route expects `OPENROUTER_API_KEY`.
+- Supabase Google auth expects `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `.env.local`.
 - Don’t commit generated output (e.g. `.next/`, `node_modules/`) or secrets.
 
 ## Agent-Specific Instructions

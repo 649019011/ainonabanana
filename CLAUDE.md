@@ -14,6 +14,7 @@
 - Radix UI 组件库（components/ui/ 中的完整组件集）
 - shadcn/ui 设计模式
 - Vercel Analytics 集成
+- Supabase 服务器端认证（Google OAuth）
 
 ## 开发命令
 
@@ -31,25 +32,91 @@ npm run start
 npm run lint
 ```
 
-## 架构
+## Supabase 认证架构
 
-### 目录结构
+本项目使用 Supabase 实现服务器端 Google OAuth 认证。认证流程使用 PKCE (Proof Key for Code Exchange) 确保安全性。
+
+### 认证流程
+
+```
+用户点击登录 → /auth/signin → Google OAuth → /auth/callback → 交换 code 为 session → 保存到 cookie → 重定向回应用
+```
+
+### 认证相关文件
+
+**Supabase 客户端创建（lib/supabase/）：**
+- `config.ts` - 从环境变量读取 `SUPABASE_URL` 和 `SUPABASE_ANON_KEY`
+- `client.ts` - 客户端浏览器客户端（`createBrowserClient`），用于客户端组件
+- `server.ts` - 服务器端客户端（`createServerClient`），用于服务器组件，cookies 只读
+- `middleware.ts` - 会话更新中间件，在每次请求时刷新过期的令牌
+
+**认证路由（app/auth/）：**
+- `signin/route.ts` - 发起 Google OAuth 登录，重定向到 Google
+- `callback/route.ts` - 处理 OAuth 回调，交换 code 为 session 并保存到 cookie
+- `signout/route.ts` - 登出功能，清除 session
+
+**UI 组件：**
+- `components/auth-button.tsx` - 智能登录按钮，根据认证状态显示登录按钮或用户信息下拉菜单
+
+### 使用认证
+
+**服务器组件中获取用户：**
+```typescript
+import { createSupabaseServerClient } from '@/lib/supabase/server'
+
+export default async function ServerComponent() {
+  const supabase = createSupabaseServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  // user 为 null 表示未登录
+}
+```
+
+**客户端组件中获取用户：**
+```typescript
+import { createSupabaseClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
+import type { User } from '@supabase/supabase-js'
+
+export default function ClientComponent() {
+  const [user, setUser] = useState<User | null>(null)
+  const supabase = createSupabaseClient()
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
+  }, [supabase])
+}
+```
+
+**环境变量（.env.local）：**
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+```
+
+详细配置说明见 `AUTH_SETUP.md`。
+
+## 目录结构
 
 - `app/` - Next.js App Router 页面
   - `layout.tsx` - 根布局，包含字体（Geist、Geist Mono）和 Analytics
   - `page.tsx` - 主落地页（客户端组件，含图片上传 UI）
   - `globals.css` - Tailwind v4 导入和主题 CSS 自定义属性
+  - `auth/` - 认证路由（signin、callback、signout）
 
 - `components/` - React 组件
   - `ui/` - shadcn/ui/Radix UI 基础组件（60+ 个组件）
   - `theme-provider.tsx` - 主题上下文提供者
+  - `auth-button.tsx` - 登录/用户信息组件
 
 - `lib/` - 工具函数
   - `utils.ts` - `cn()` 辅助函数，用于合并 Tailwind 类名
+  - `supabase/` - Supabase 认证相关工具
 
 - `hooks/` - 自定义 React hooks
   - `use-mobile.ts` - 移动端检测
   - `use-toast.ts` - 提示通知
+
+- `middleware.ts` - Next.js 中间件，调用 Supabase 会话更新
 
 ### 关键模式
 
@@ -70,4 +137,4 @@ npm run lint
 
 ## UI 组件
 
-`components/ui/` 目录包含遵循 shadcn/ui 约定的预构建 Radix UI 组件。这些组件都有完整的类型定义，可直接使用。常用组件包括 Button、Card、Dialog、Accordion、Input、Textarea 等。
+`components/ui/` 目录包含遵循 shadcn/ui 约定的预构建 Radix UI 组件。这些组件都有完整的类型定义，可直接使用。常用组件包括 Button、Card、Dialog、Accordion、Input、Textarea、Avatar、DropdownMenu 等。

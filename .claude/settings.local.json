@@ -5,7 +5,14 @@
       "Bash(npm install)",
       "Bash(npm install:*)",
       "Bash(taskkill:*)",
-      "Bash(netstat:*)"
+      "Bash(netstat:*)",
+      "Bash(if [ -d \"D:\\\\codex\\\\image-editor-website\\\\lib\\\\supabase\" ])",
+      "Bash(then ls \"D:\\\\codex\\\\image-editor-website\\\\lib\\\\supabase\")",
+      "Bash(else echo \"Directory does not exist\")",
+      "Bash(fi)",
+      "Bash(test:*)",
+      "Bash(npm run lint)",
+      "Bash(git add:*)"
     ]
   }
 }
