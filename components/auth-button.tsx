@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,41 +13,63 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { createSupabaseClient } from '@/lib/supabase/client'
 
-export function AuthButton() {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
-  const supabase = createSupabaseClient()
+interface AuthButtonProps {
+  initialUser: User | null
+  isSupabaseConfigured: boolean
+}
 
+export function AuthButton({ initialUser, isSupabaseConfigured }: AuthButtonProps) {
+  const [user, setUser] = useState<User | null>(initialUser)
+  const [loading, setLoading] = useState(false)
+  const router = useRouter()
+
+  // 监听认证状态变化（通过轮询服务器来保持同步）
   useEffect(() => {
-    // 获取当前会话
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
+    if (!isSupabaseConfigured) return
 
-    // 监听认证状态变化
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-    })
+    const checkAuth = async () => {
+      try {
+        const res = await fetch('/api/auth/user')
+        if (res.ok) {
+          const data = await res.json()
+          setUser(data.user)
+        }
+      } catch {
+        // 忽略错误
+      }
+    }
 
-    return () => subscription.unsubscribe()
-  }, [supabase])
+    // 页面可见时检查认证状态
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkAuth()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // 初始检查
+    if (!initialUser) {
+      checkAuth()
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [initialUser, isSupabaseConfigured])
 
   const handleSignOut = async () => {
+    setLoading(true)
     await fetch('/auth/signout', { method: 'POST' })
-    window.location.href = '/'
+    setUser(null)
+    router.push('/')
+    router.refresh()
+    setLoading(false)
   }
 
-  if (loading) {
-    return (
-      <Button variant="outline" size="sm" disabled>
-        加载中...
-      </Button>
-    )
+  if (!isSupabaseConfigured) {
+    return null
   }
 
   if (user) {
@@ -79,8 +102,8 @@ export function AuthButton() {
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
-            退出登录
+          <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer" disabled={loading}>
+            {loading ? '退出中...' : '退出登录'}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

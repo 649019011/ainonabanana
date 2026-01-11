@@ -2,9 +2,17 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
-import { supabaseAnonKey, supabaseUrl } from '@/lib/supabase/config'
+import { isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from '@/lib/supabase/config'
 
 export async function GET(request: NextRequest) {
+  // 检查 Supabase 是否已配置
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { error: 'Supabase is not configured. Please set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.' },
+      { status: 503 }
+    )
+  }
+
   const requestUrl = new URL(request.url)
   const nextParam = requestUrl.searchParams.get('next')
   const nextPath = nextParam && nextParam.startsWith('/') ? nextParam : '/'
@@ -13,7 +21,7 @@ export async function GET(request: NextRequest) {
   redirectTo.searchParams.set('next', nextPath)
 
   const cookieStore = cookies()
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+  const supabase = createServerClient(supabaseUrl!, supabaseAnonKey!, {
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll: () => {},

@@ -1,11 +1,11 @@
-function getRequiredEnv(name: string): string {
-  const value = process.env[name]
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`)
-  }
-  return value
+function getEnv(name: string): string | undefined {
+  return process.env[name]
 }
 
-export const supabaseUrl = getRequiredEnv('SUPABASE_URL')
-export const supabaseAnonKey = getRequiredEnv('SUPABASE_ANON_KEY')
+export const supabaseUrl = getEnv('SUPABASE_URL')
+export const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY')
+
+export function isSupabaseConfigured(): boolean {
+  return !!(supabaseUrl && supabaseAnonKey)
+}
 

@@ -89,11 +89,40 @@ export default function ClientComponent() {
 
 **环境变量（.env.local）：**
 ```env
+# Supabase 认证
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
+
+# OpenRouter AI 图像生成
+OPENROUTER_API_KEY=your-openrouter-key
+OPENROUTER_SITE_URL=http://localhost:3000  # 或生产环境 URL
+OPENROUTER_SITE_NAME=Nano Banana
 ```
 
 详细配置说明见 `AUTH_SETUP.md`。
+
+## 图像生成架构
+
+本项目使用 OpenRouter API 调用 Google Gemini 2.5 Flash 模型进行 AI 图像编辑。
+
+### 图像生成流程
+
+```
+用户上传图片 → 前端压缩并转 base64 → POST /api/generate → OpenRouter API → Gemini 2.5 Flash → 返回图片 URL → 展示在 Output Gallery
+```
+
+### API 路由（app/api/generate/route.ts）
+
+- 接收 `image`（base64 data URL 或 URL）和 `prompt`（文本提示词）
+- 调用 OpenRouter 的 `google/gemini-2.5-flash-image` 模型
+- 从复杂的响应结构中提取图片 URL
+- 支持多种响应格式：data URL、HTTP URL、base64 等
+
+### 前端处理（app/page.tsx）
+
+- 图片上传时自动压缩：最大 2048px 边长，JPEG 0.92 质量
+- 支持 10MB 以内的图片文件
+- 生成结果存储在本地 state 中，展示在 Output Gallery
 
 ## 目录结构
 
@@ -102,6 +131,7 @@ SUPABASE_ANON_KEY=your-anon-key
   - `page.tsx` - 主落地页（客户端组件，含图片上传 UI）
   - `globals.css` - Tailwind v4 导入和主题 CSS 自定义属性
   - `auth/` - 认证路由（signin、callback、signout）
+  - `api/generate/` - 图像生成 API 路由，使用 OpenRouter 调用 Gemini 2.5 Flash
 
 - `components/` - React 组件
   - `ui/` - shadcn/ui/Radix UI 基础组件（60+ 个组件）

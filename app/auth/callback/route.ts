@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
-import { supabaseAnonKey, supabaseUrl } from '@/lib/supabase/config'
+import { isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from '@/lib/supabase/config'
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
@@ -18,8 +18,16 @@ export async function GET(request: NextRequest) {
     return response
   }
 
+  // 检查 Supabase 是否已配置
+  if (!isSupabaseConfigured()) {
+    const errorUrl = new URL('/', requestUrl.origin)
+    errorUrl.searchParams.set('auth', 'error')
+    errorUrl.searchParams.set('message', 'Supabase is not configured')
+    return NextResponse.redirect(errorUrl)
+  }
+
   const cookieStore = cookies()
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+  const supabase = createServerClient(supabaseUrl!, supabaseAnonKey!, {
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll: (cookiesToSet) => {
