@@ -1,12 +1,9 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/toaster"
+import Script from "next/script"
 import "./globals.css"
-
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "Nano Banana - AI Image Editor | Edit Photos with Text",
@@ -43,6 +40,18 @@ export default function RootLayout({
         {children}
         <Analytics />
         <Toaster />
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-YVLE8600YM"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-YVLE8600YM');
+          `}
+        </Script>
       </body>
     </html>
   )
