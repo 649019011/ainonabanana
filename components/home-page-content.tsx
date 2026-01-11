@@ -38,8 +38,8 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
     if (!file.type.startsWith("image/")) {
       toast({
         variant: "destructive",
-        title: "请选择图片文件",
-        description: "仅支持上传图片格式（jpg/png/webp 等）",
+        title: "Invalid file type",
+        description: "Only image files are supported (jpg/png/webp, etc.)",
       })
       e.target.value = ""
       return
@@ -49,8 +49,8 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
     if (file.size > maxBytes) {
       toast({
         variant: "destructive",
-        title: "图片过大",
-        description: "请上传不超过 10MB 的图片",
+        title: "File too large",
+        description: "Please upload an image no larger than 10MB",
       })
       e.target.value = ""
       return
@@ -84,8 +84,8 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
       reader.onerror = () => {
         toast({
           variant: "destructive",
-          title: "读取失败",
-          description: "图片读取失败，请重新选择",
+          title: "Read failed",
+          description: "Failed to read the image, please try again",
         })
         e.target.value = ""
       }
@@ -106,8 +106,8 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
     if (!selectedImage) {
       toast({
         variant: "destructive",
-        title: "请先上传图片",
-        description: "请点击上传区域选择一张图片",
+        title: "No image uploaded",
+        description: "Please upload an image first",
       })
       return
     }
@@ -115,8 +115,8 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
     if (!prompt.trim()) {
       toast({
         variant: "destructive",
-        title: "请输入提示词",
-        description: "请在 Main Prompt 中输入您想要的编辑效果",
+        title: "No prompt entered",
+        description: "Please describe how you want to transform your image",
       })
       return
     }
@@ -141,13 +141,13 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
         const message =
           data.details ||
           data.error ||
-          `生成失败（HTTP ${response.status}）`
+          `Generation failed (HTTP ${response.status})`
         throw new Error(message)
       }
 
       const imageUrl = data.imageUrl
       if (!imageUrl) {
-        throw new Error("未能从 API 响应中获取生成图片")
+        throw new Error("Failed to get generated image from API response")
       }
 
       // Add to generated images
@@ -161,15 +161,15 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
       setGeneratedImages((prev) => [newImage, ...prev])
 
       toast({
-        title: "生成成功！",
-        description: "您的图片已生成，请查看 Output Gallery",
+        title: "Generation successful!",
+        description: "Your image has been generated, check the Output Gallery",
       })
     } catch (error: any) {
-      console.error("生成失败:", error)
+      console.error("Generation failed:", error)
       toast({
         variant: "destructive",
-        title: "生成失败",
-        description: error.message || "请稍后重试",
+        title: "Generation failed",
+        description: error.message || "Please try again later",
       })
     } finally {
       setIsGenerating(false)
@@ -331,7 +331,7 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
                       {isGenerating ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          生成中...
+                          Generating...
                         </>
                       ) : (
                         <>

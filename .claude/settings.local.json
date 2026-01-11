@@ -12,7 +12,14 @@
       "Bash(fi)",
       "Bash(test:*)",
       "Bash(npm run lint)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(mkdir:*)",
+      "Bash(tasklist:*)",
+      "Bash(npm run build)",
+      "Bash(npx vercel deploy:*)",
+      "Bash(del nul)"
     ]
   }
 }

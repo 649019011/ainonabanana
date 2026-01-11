@@ -9,7 +9,7 @@ export async function GET() {
     return NextResponse.json({ user: null })
   }
 
-  const supabase = createSupabaseServerClient()
+  const supabase = await createSupabaseServerClient()
 
   if (!supabase) {
     return NextResponse.json({ user: null })

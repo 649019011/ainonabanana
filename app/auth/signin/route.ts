@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   const redirectTo = new URL('/auth/callback', requestUrl.origin)
   redirectTo.searchParams.set('next', nextPath)
 
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const supabase = createServerClient(supabaseUrl!, supabaseAnonKey!, {
     cookies: {
       getAll: () => cookieStore.getAll(),

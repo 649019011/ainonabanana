@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { createSupabaseClient } from '@/lib/supabase/client'
 
 interface AuthButtonProps {
   initialUser: User | null
@@ -89,31 +90,62 @@ export function AuthButton({ initialUser, isSupabaseConfigured }: AuthButtonProp
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel>我的账户</DropdownMenuLabel>
+          <DropdownMenuLabel>My Account</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="flex flex-col items-start">
-            <span className="text-xs text-muted-foreground">邮箱</span>
+            <span className="text-xs text-muted-foreground">Email</span>
             <span className="text-sm truncate">{userEmail}</span>
           </DropdownMenuItem>
           {user.user_metadata?.full_name && (
             <DropdownMenuItem className="flex flex-col items-start">
-              <span className="text-xs text-muted-foreground">姓名</span>
+              <span className="text-xs text-muted-foreground">Name</span>
               <span className="text-sm">{user.user_metadata.full_name}</span>
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer" disabled={loading}>
-            {loading ? '退出中...' : '退出登录'}
+            {loading ? 'Signing out...' : 'Sign out'}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     )
   }
 
-  // 用户未登录
+  // 用户未登录 - 使用客户端 OAuth 登录
+  const handleSignIn = async () => {
+    setLoading(true)
+    const supabase = createSupabaseClient()
+    if (!supabase) {
+      setLoading(false)
+      return
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            next: '/',
+          },
+        },
+      })
+
+      if (error) {
+        console.error('Sign in error:', error.message)
+        setLoading(false)
+      } else if (data?.url) {
+        window.location.href = data.url
+      }
+    } catch (err) {
+      console.error('Sign in error:', err)
+      setLoading(false)
+    }
+  }
+
   return (
-    <Button variant="outline" size="sm" asChild>
-      <a href="/auth/signin">Google 登录</a>
+    <Button variant="outline" size="sm" onClick={handleSignIn} disabled={loading}>
+      {loading ? 'Signing in...' : 'Sign in with Google'}
     </Button>
   )
 }

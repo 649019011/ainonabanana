@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     return response
   }
 
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const supabase = createServerClient(supabaseUrl!, supabaseAnonKey!, {
     cookies: {
       getAll: () => cookieStore.getAll(),
