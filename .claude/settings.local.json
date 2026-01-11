@@ -20,7 +20,8 @@
       "Bash(npm run build)",
       "Bash(npx vercel deploy:*)",
       "Bash(del nul)",
-      "Bash(npx vercel:*)"
+      "Bash(npx vercel:*)",
+      "Bash(vercel env add NEXT_PUBLIC_SUPABASE_URL)"
     ]
   }
 }
