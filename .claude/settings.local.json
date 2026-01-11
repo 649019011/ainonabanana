@@ -19,7 +19,8 @@
       "Bash(tasklist:*)",
       "Bash(npm run build)",
       "Bash(npx vercel deploy:*)",
-      "Bash(del nul)"
+      "Bash(del nul)",
+      "Bash(npx vercel:*)"
     ]
   }
 }

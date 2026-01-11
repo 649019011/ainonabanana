@@ -3,14 +3,16 @@ import OpenAI from "openai"
 
 export const runtime = "nodejs"
 
-const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    "HTTP-Referer": process.env.OPENROUTER_SITE_URL ?? "http://localhost:3000",
-    "X-Title": process.env.OPENROUTER_SITE_NAME ?? "Nano Banana",
-  },
-})
+function createOpenAIClient() {
+  return new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey: process.env.OPENROUTER_API_KEY || "",
+    defaultHeaders: {
+      "HTTP-Referer": process.env.OPENROUTER_SITE_URL ?? "http://localhost:3000",
+      "X-Title": process.env.OPENROUTER_SITE_NAME ?? "Nano Banana",
+    },
+  })
+}
 
 function extractFirstImageUrlFromText(text: string): string | null {
   // data URLs can be extremely long; still prefer them when present.
@@ -205,6 +207,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const openai = createOpenAIClient()
     const completion = await openai.chat.completions.create({
       model: "google/gemini-2.5-flash-image",
       temperature: 0,
