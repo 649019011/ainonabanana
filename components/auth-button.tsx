@@ -111,36 +111,11 @@ export function AuthButton({ initialUser, isSupabaseConfigured }: AuthButtonProp
     )
   }
 
-  // 用户未登录 - 使用客户端 OAuth 登录
+  // 用户未登录 - 使用服务器端 OAuth 登录路由
   const handleSignIn = async () => {
     setLoading(true)
-    const supabase = createSupabaseClient()
-    if (!supabase) {
-      setLoading(false)
-      return
-    }
-
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-          queryParams: {
-            next: '/',
-          },
-        },
-      })
-
-      if (error) {
-        console.error('Sign in error:', error.message)
-        setLoading(false)
-      } else if (data?.url) {
-        window.location.href = data.url
-      }
-    } catch (err) {
-      console.error('Sign in error:', err)
-      setLoading(false)
-    }
+    // 直接跳转到服务器端登录路由
+    window.location.href = '/auth/signin?next=/'
   }
 
   return (
