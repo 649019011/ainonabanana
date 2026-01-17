@@ -97,9 +97,20 @@ SUPABASE_ANON_KEY=your-anon-key
 OPENROUTER_API_KEY=your-openrouter-key
 OPENROUTER_SITE_URL=http://localhost:3000  # 或生产环境 URL
 OPENROUTER_SITE_NAME=Nano Banana
+
+# Creem 支付
+CREEM_API_KEY=your_creem_api_key_here
+CREEM_API_URL=https://api.creem.io/v1
+CREEM_WEBHOOK_SECRET=your_webhook_secret_here
+CREEM_PRODUCT_BASIC_MONTHLY=prod_xxx_basic_monthly
+CREEM_PRODUCT_BASIC_YEARLY=prod_xxx_basic_yearly
+CREEM_PRODUCT_PRO_MONTHLY=prod_xxx_pro_monthly
+CREEM_PRODUCT_PRO_YEARLY=prod_xxx_pro_yearly
+CREEM_PRODUCT_MAX_MONTHLY=prod_xxx_max_monthly
+CREEM_PRODUCT_MAX_YEARLY=prod_xxx_max_yearly
 ```
 
-详细配置说明见 `AUTH_SETUP.md`。
+详细配置说明见 `AUTH_SETUP.md` 和 `CREEM_SETUP.md`。
 
 ## 图像生成架构
 
@@ -129,18 +140,24 @@ OPENROUTER_SITE_NAME=Nano Banana
 - `app/` - Next.js App Router 页面
   - `layout.tsx` - 根布局，包含字体（Geist、Geist Mono）和 Analytics
   - `page.tsx` - 主落地页（客户端组件，含图片上传 UI）
+  - `pricing/page.tsx` - Pricing 页面
   - `globals.css` - Tailwind v4 导入和主题 CSS 自定义属性
   - `auth/` - 认证路由（signin、callback、signout）
   - `api/generate/` - 图像生成 API 路由，使用 OpenRouter 调用 Gemini 2.5 Flash
+  - `api/checkout/` - Creem 支付会话创建 API
+  - `api/webhooks/creem/` - Creem webhook 处理
 
 - `components/` - React 组件
   - `ui/` - shadcn/ui/Radix UI 基础组件（60+ 个组件）
   - `theme-provider.tsx` - 主题上下文提供者
   - `auth-button.tsx` - 登录/用户信息组件
+  - `pricing-page-content.tsx` - Pricing 页面客户端组件
+  - `home-page-content.tsx` - 主页客户端组件
 
 - `lib/` - 工具函数
   - `utils.ts` - `cn()` 辅助函数，用于合并 Tailwind 类名
   - `supabase/` - Supabase 认证相关工具
+  - `creem/` - Creem 支付相关工具（config.ts、client.ts）
 
 - `hooks/` - 自定义 React hooks
   - `use-mobile.ts` - 移动端检测
@@ -168,3 +185,66 @@ OPENROUTER_SITE_NAME=Nano Banana
 ## UI 组件
 
 `components/ui/` 目录包含遵循 shadcn/ui 约定的预构建 Radix UI 组件。这些组件都有完整的类型定义，可直接使用。常用组件包括 Button、Card、Dialog、Accordion、Input、Textarea、Avatar、DropdownMenu 等。
+
+## Creem 支付架构
+
+本项目使用 Creem 作为支付平台来处理订阅和一次性付款。
+
+### 支付流程
+
+```
+用户选择套餐 → POST /api/checkout → Creem API → 返回 checkout_url → 重定向到 Creem 支付页面 → 支付成功 → webhook 回调 → /api/webhooks/creem
+```
+
+### Creem 相关文件
+
+**Creem 客户端工具（lib/creem/）：**
+- `config.ts` - 从环境变量读取 `CREEM_API_KEY` 和产品 ID 映射
+- `client.ts` - Creem API 客户端，包含 `createCheckoutSession` 和 `getCheckoutSession` 函数
+
+**API 路由：**
+- `app/api/checkout/route.ts` - 创建支付会话，返回 Creem checkout URL
+- `app/api/webhooks/creem/route.ts` - 处理 Creem webhook 回调（支付完成、订阅创建等）
+
+### 使用支付功能
+
+**创建支付会话：**
+```typescript
+// 前端调用
+const response = await fetch('/api/checkout', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    planId: 'basic|pro|max',
+    billingPeriod: 'monthly|yearly',
+    userEmail: '[email protected]',
+    metadata: { userId: 'user_123' },
+  }),
+})
+
+const data = await response.json()
+// data.checkoutUrl - Creem 支付页面 URL
+// data.checkoutId - Checkout 会话 ID
+```
+
+**Webhook 事件处理：**
+- `checkout.completed` - 支付完成
+- `subscription.created` - 订阅创建
+- `subscription.cancelled` - 订阅取消
+- `order.paid` - 订单支付成功
+
+详细配置说明见 `CREEM_SETUP.md`。
+
+## Pricing 页面
+
+访问 `/pricing` 可查看定价页面，包含三个套餐：Basic、Pro、Max。
+
+**套餐配置：**
+- Basic: $12/月或 $144/年，1800 credits/年，75 图片/月
+- Pro: $19.50/月或 $234/年，9600 credits/年，400 图片/月
+- Max: $80/月或 $960/年，55200 credits/年，2300 图片/月
+
+用户点击 "Get Started" 按钮时：
+1. 检查用户是否登录
+2. 调用 `/api/checkout` 创建支付会话
+3. 重定向到 Creem 支付页面完成支付

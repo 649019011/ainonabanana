@@ -21,7 +21,16 @@
       "Bash(npx vercel deploy:*)",
       "Bash(del nul)",
       "Bash(npx vercel:*)",
-      "Bash(vercel env add NEXT_PUBLIC_SUPABASE_URL)"
+      "Bash(vercel env add NEXT_PUBLIC_SUPABASE_URL)",
+      "WebSearch",
+      "Bash(timeout 10 cat:*)",
+      "Bash(timeout 8 cat:*)",
+      "Bash(npx tsx scripts/create-creem-products.ts)",
+      "Bash(findstr:*)",
+      "Bash(start http://localhost:3000/pricing)",
+      "Bash(curl:*)",
+      "Bash(powershell -Command \"Stop-Process -Id 44876 -Force\")",
+      "Bash(kill:*)"
     ]
   }
 }

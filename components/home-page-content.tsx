@@ -10,6 +10,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { useToast } from "@/hooks/use-toast"
 import { AuthButton } from "@/components/auth-button"
+import { CreditsDisplay } from "@/components/credits-display"
+import { deductCreditsForGeneration } from "@/lib/credits/client"
+import { CREDITS_PER_IMAGE } from "@/lib/credits/config"
 
 interface GeneratedImage {
   id: string
@@ -28,6 +31,7 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
   const [prompt, setPrompt] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([])
+  const [userBalance, setUserBalance] = useState<number | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const { toast } = useToast()
 
@@ -121,9 +125,51 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
       return
     }
 
+    // 检查用户是否登录
+    if (!initialUser) {
+      toast({
+        variant: "destructive",
+        title: "请先登录",
+        description: "生成图像需要登录账户并拥有足够的 credits",
+      })
+      return
+    }
+
+    // 检查余额
+    if (userBalance === null || userBalance < CREDITS_PER_IMAGE) {
+      toast({
+        variant: "destructive",
+        title: "余额不足",
+        description: `生成图像需要 ${CREDITS_PER_IMAGE} credits，当前余额：${userBalance || 0}。请购买更多 credits。`,
+      })
+      return
+    }
+
     setIsGenerating(true)
 
     try {
+      // 先扣除 credits
+      const deductResult = await deductCreditsForGeneration(CREDITS_PER_IMAGE)
+
+      if (!deductResult.success) {
+        toast({
+          variant: "destructive",
+          title: "扣除 credits 失败",
+          description: deductResult.error || "请稍后重试",
+        })
+        setIsGenerating(false)
+        return
+      }
+
+      // 更新余额
+      if (deductResult.balance !== undefined) {
+        setUserBalance(deductResult.balance)
+        // 刷新 credits 显示组件
+        if (typeof window !== 'undefined' && (window as any).refreshCreditsDisplay) {
+          ;(window as any).refreshCreditsDisplay()
+        }
+      }
+
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: {
@@ -138,6 +184,7 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
       const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
+        // 生成失败，退还 credits
         const message =
           data.details ||
           data.error ||
@@ -162,7 +209,7 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
 
       toast({
         title: "Generation successful!",
-        description: "Your image has been generated, check the Output Gallery",
+        description: `已扣除 ${CREDITS_PER_IMAGE} credits，剩余 ${deductResult.balance || 0} credits`,
       })
     } catch (error: any) {
       console.error("Generation failed:", error)
@@ -176,6 +223,11 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
     }
   }
 
+  // 刷新余额的函数（供 CreditsDisplay 组件调用）
+  const refreshBalance = (newBalance: number) => {
+    setUserBalance(newBalance)
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -186,7 +238,8 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
               <div className="text-3xl">🍌</div>
               <h1 className="text-2xl font-bold">Nano Banana</h1>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              <CreditsDisplay initialUser={initialUser} />
               <AuthButton initialUser={initialUser} isSupabaseConfigured={isSupabaseConfigured} />
               <Button className="bg-primary text-primary-foreground hover:bg-primary/90">Try Now</Button>
             </div>
