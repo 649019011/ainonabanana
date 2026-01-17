@@ -84,9 +84,30 @@ export async function POST(request: NextRequest) {
       checkoutId: checkoutResponse.id,
     })
   } catch (error) {
-    console.error('Checkout creation error:', error)
+    console.error('Checkout creation error:', {
+      productId,
+      planId,
+      billingPeriod,
+      error,
+      errorDetails: error instanceof CreemApiError ? error.details : undefined,
+    })
 
     if (error instanceof CreemApiError) {
+      // 如果是 400 错误，提供详细的调试信息
+      if (error.statusCode === 400) {
+        return NextResponse.json(
+          {
+            error: `Creem API 请求错误: ${error.message}`,
+            productId,
+            planId,
+            billingPeriod,
+            details: error.details,
+            hint: '请检查 Creem Dashboard 中产品 ID 是否正确，以及产品是否处于活跃状态',
+          },
+          { status: 400 }
+        )
+      }
+
       // 如果是 403 错误，提供更友好的提示
       if (error.statusCode === 403) {
         return NextResponse.json(
@@ -111,7 +132,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: 'Failed to create checkout session' },
+      {
+        error: 'Failed to create checkout session',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     )
   }
