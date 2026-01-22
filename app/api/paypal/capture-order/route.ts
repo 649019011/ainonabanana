@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     ;({ orderId } = body)
 
+    console.log('PayPal capture-order request:', { orderId, body })
+
     // 验证必需参数
     if (!orderId) {
       return NextResponse.json(
@@ -37,6 +39,8 @@ export async function POST(request: NextRequest) {
 
     // 捕获 PayPal 订单
     const captureResponse = await capturePayPalOrder(orderId)
+
+    console.log('PayPal capture-order response:', JSON.stringify(captureResponse, null, 2))
 
     // 检查捕获状态
     if (captureResponse.status !== 'COMPLETED') {
@@ -59,12 +63,20 @@ export async function POST(request: NextRequest) {
     }
 
     // 从 custom_id 中获取用户 ID
-    userId = captureResponse.purchase_units[0]?.custom_id || ''
+    // 注意：custom_id 可能在两个位置：
+    // 1. purchase_units[0].custom_id (我们设置的位置)
+    // 2. purchase_units[0].payments.captures[0].custom_id (PayPal 可能返回的位置)
+    userId = captureResponse.purchase_units[0]?.custom_id ||
+             captureResponse.purchase_units[0]?.payments?.captures?.[0]?.custom_id || ''
+
     const referenceId = captureResponse.purchase_units[0]?.reference_id || ''
     packId = referenceId.split('-')[0]
 
+    console.log('Extracted from order:', { userId, referenceId, packId })
+
     // 验证用户 ID
     if (!userId) {
+      console.error('No userId found in order. Full purchase_units:', captureResponse.purchase_units[0])
       return NextResponse.json(
         { error: 'No user ID found in order' },
         { status: 400 }

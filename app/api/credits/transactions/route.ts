@@ -11,7 +11,7 @@ import { getUserTransactions } from '@/lib/credits/db'
 export async function GET(request: NextRequest) {
   try {
     // 获取当前用户
-    const supabase = createSupabaseServerClient()
+    const supabase = await createSupabaseServerClient()
     const { data: { user }, error: userError } = await supabase.auth.getUser()
 
     if (userError || !user) {

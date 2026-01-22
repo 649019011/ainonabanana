@@ -1,9 +1,9 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { isSupabaseConfigured } from '@/lib/supabase/config'
 import { isPayPalConfigured } from '@/lib/paypal/config'
-import { PricingPageContent } from '@/components/pricing-page-content'
+import { SubscriptionPricingContent } from '@/components/subscription-pricing-content'
 
-export default async function PricingPage() {
+export default async function SubscriptionPricingPage() {
   let user = null
   let configured = isSupabaseConfigured()
   let payPalConfigured = isPayPalConfigured()
@@ -17,7 +17,7 @@ export default async function PricingPage() {
   }
 
   return (
-    <PricingPageContent
+    <SubscriptionPricingContent
       initialUser={user}
       isSupabaseConfigured={configured}
       isPayPalConfigured={payPalConfigured}

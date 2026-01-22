@@ -122,6 +122,22 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      // 如果是 404 错误，产品不存在
+      if (error.statusCode === 404) {
+        const details = error.details as { message?: string[] }
+        return NextResponse.json(
+          {
+            error: `产品不存在：请确保在 Creem Dashboard 中已创建对应的产品 (Product ID: ${productId})`,
+            productId,
+            planId,
+            billingPeriod,
+            details: details?.message || error.details,
+            hint: '登录 Creem Dashboard 创建产品，然后更新 .env.local 中的产品 ID',
+          },
+          { status: 404 }
+        )
+      }
+
       return NextResponse.json(
         {
           error: error.message,

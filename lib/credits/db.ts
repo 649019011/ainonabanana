@@ -4,7 +4,8 @@
  * 用于与 Supabase 数据库交互，管理用户 credits 余额和交易记录
  */
 
-import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
+import { isSupabaseConfigured, supabaseUrl, supabaseServiceRoleKey } from '@/lib/supabase/config'
 import type {
   UserCredits,
   CreditTransaction,
@@ -14,13 +15,29 @@ import type {
 } from './config'
 
 /**
+ * 创建直接数据库客户端（用于 RPC 调用）
+ * 使用 service_role key 以绕过 RLS 限制，确保服务端操作正常
+ */
+function createDirectDbClient() {
+  if (!isSupabaseConfigured() || !supabaseUrl || !supabaseServiceRoleKey) {
+    throw new Error('Supabase is not configured. Missing SUPABASE_SERVICE_ROLE_KEY.')
+  }
+  return createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  })
+}
+
+/**
  * 获取用户 credits 余额
  *
  * @param userId - 用户 ID
  * @returns 用户 credits 余额，如果用户没有记录则返回 null
  */
 export async function getUserCredits(userId: string): Promise<UserCredits | null> {
-  const supabase = createSupabaseServerClient()
+  const supabase = createDirectDbClient()
 
   const { data, error } = await supabase
     .from('user_credits')
@@ -46,7 +63,7 @@ export async function getUserCredits(userId: string): Promise<UserCredits | null
  * @returns 用户 credits 余额
  */
 export async function getOrCreateUserCredits(userId: string): Promise<UserCredits> {
-  const supabase = createSupabaseServerClient()
+  const supabase = createDirectDbClient()
 
   // 首先尝试获取现有记录
   const existing = await getUserCredits(userId)
@@ -90,7 +107,7 @@ export async function addCredits(
     metadata?: Record<string, unknown>
   }
 ): Promise<AddCreditsResult> {
-  const supabase = createSupabaseServerClient()
+  const supabase = createDirectDbClient()
 
   try {
     const { data, error } = await supabase.rpc('add_credits', {
@@ -146,7 +163,7 @@ export async function deductCredits(
     metadata?: Record<string, unknown>
   }
 ): Promise<DeductCreditsResult> {
-  const supabase = createSupabaseServerClient()
+  const supabase = createDirectDbClient()
 
   try {
     const { data, error } = await supabase.rpc('deduct_credits', {
@@ -194,7 +211,7 @@ export async function getUserTransactions(
   limit = 50,
   offset = 0
 ): Promise<CreditTransaction[]> {
-  const supabase = createSupabaseServerClient()
+  const supabase = createDirectDbClient()
 
   const { data, error } = await supabase
     .from('credit_transactions')
@@ -221,7 +238,7 @@ export async function getUserTransactionStats(userId: string): Promise<{
   totalUsed: number
   transactionCount: number
 }> {
-  const supabase = createSupabaseServerClient()
+  const supabase = createDirectDbClient()
 
   const { data, error } = await supabase
     .from('credit_transactions')

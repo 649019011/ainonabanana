@@ -2,8 +2,9 @@
 
 import type React from "react"
 
-import { useRef, useState } from "react"
-import { Upload, Sparkles, Check, Loader2 } from "lucide-react"
+import { useRef, useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
+import { Upload, Sparkles, Check, Loader2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -11,7 +12,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useToast } from "@/hooks/use-toast"
 import { AuthButton } from "@/components/auth-button"
 import { CreditsDisplay } from "@/components/credits-display"
-import { deductCreditsForGeneration } from "@/lib/credits/client"
+import { deductCreditsForGeneration, fetchUserBalance } from "@/lib/credits/client"
 import { CREDITS_PER_IMAGE } from "@/lib/credits/config"
 
 interface GeneratedImage {
@@ -34,6 +35,33 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
   const [userBalance, setUserBalance] = useState<number | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const { toast } = useToast()
+  const searchParams = useSearchParams()
+
+  // 检查 URL 中的认证错误参数
+  useEffect(() => {
+    const authError = searchParams.get('auth')
+    const message = searchParams.get('message')
+
+    if (authError) {
+      console.error('[HomePage] Authentication error detected:', authError, message)
+      toast({
+        variant: "destructive",
+        title: "Login error",
+        description: `Authentication failed: ${message || authError}`,
+      })
+    }
+  }, [searchParams, toast])
+
+  // 获取用户 credits 余额
+  useEffect(() => {
+    if (initialUser) {
+      fetchUserBalance().then((result) => {
+        if (result.success && result.balance !== undefined) {
+          setUserBalance(result.balance)
+        }
+      })
+    }
+  }, [initialUser])
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -129,8 +157,8 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
     if (!initialUser) {
       toast({
         variant: "destructive",
-        title: "请先登录",
-        description: "生成图像需要登录账户并拥有足够的 credits",
+        title: "Please login first",
+        description: "Image generation requires logging in with sufficient credits",
       })
       return
     }
@@ -139,8 +167,8 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
     if (userBalance === null || userBalance < CREDITS_PER_IMAGE) {
       toast({
         variant: "destructive",
-        title: "余额不足",
-        description: `生成图像需要 ${CREDITS_PER_IMAGE} credits，当前余额：${userBalance || 0}。请购买更多 credits。`,
+        title: "Insufficient credits",
+        description: `Image generation requires ${CREDITS_PER_IMAGE} credits, current balance: ${userBalance || 0}. Please purchase more credits.`,
       })
       return
     }
@@ -154,8 +182,8 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
       if (!deductResult.success) {
         toast({
           variant: "destructive",
-          title: "扣除 credits 失败",
-          description: deductResult.error || "请稍后重试",
+          title: "Failed to deduct credits",
+          description: deductResult.error || "Please try again later",
         })
         setIsGenerating(false)
         return
@@ -209,7 +237,7 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
 
       toast({
         title: "Generation successful!",
-        description: `已扣除 ${CREDITS_PER_IMAGE} credits，剩余 ${deductResult.balance || 0} credits`,
+        description: `Deducted ${CREDITS_PER_IMAGE} credits, remaining ${deductResult.balance || 0} credits`,
       })
     } catch (error: any) {
       console.error("Generation failed:", error)
@@ -241,7 +269,9 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
             <div className="flex items-center gap-3">
               <CreditsDisplay initialUser={initialUser} />
               <AuthButton initialUser={initialUser} isSupabaseConfigured={isSupabaseConfigured} />
-              <Button className="bg-primary text-primary-foreground hover:bg-primary/90">Try Now</Button>
+              <Button className="bg-primary text-primary-foreground hover:bg-primary/90" asChild>
+                <a href="#generator">Try Now</a>
+              </Button>
             </div>
           </div>
         </div>
@@ -256,8 +286,8 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
               <span className="font-semibold">NEW</span>
             </div>
             <span>Nano Banana Pro is now live</span>
-            <Button variant="link" className="h-auto p-0 text-primary">
-              Try it now →
+            <Button variant="link" className="h-auto p-0 text-primary" asChild>
+              <a href="/pricing">Get Credits →</a>
             </Button>
           </div>
         </div>
@@ -268,6 +298,11 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
         <div className="absolute top-10 right-10 opacity-10 text-9xl rotate-12">🍌</div>
         <div className="absolute bottom-10 left-10 opacity-10 text-9xl -rotate-12">🍌</div>
         <div className="container mx-auto px-4 text-center relative z-10">
+          {/* Independent Product Declaration */}
+          <p className="text-xs text-muted-foreground mb-4 max-w-3xl mx-auto">
+            Nano Banana is an independent product and is not affiliated with, endorsed by, or sponsored by Google, OpenAI, or any other AI model providers. We provide access to AI models through our custom interface.
+          </p>
+
           <div className="inline-block mb-6 px-4 py-2 bg-accent rounded-full border border-border">
             <span className="text-sm">🍌 The AI model that outperforms Flux Kontext</span>
           </div>
@@ -277,12 +312,14 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
             editing and scene preservation that surpasses Flux Kontext. Experience the future of AI image editing.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
-            <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8">
-              <Sparkles className="mr-2 h-5 w-5" />
-              Start Editing
+            <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8" asChild>
+              <a href="#generator">
+                <Sparkles className="mr-2 h-5 w-5" />
+                Start Editing
+              </a>
             </Button>
-            <Button size="lg" variant="outline" className="text-lg px-8 bg-transparent">
-              View Examples
+            <Button size="lg" variant="outline" className="text-lg px-8 bg-transparent" asChild>
+              <a href="/pricing">Get Credits</a>
             </Button>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6 mt-12 text-sm text-muted-foreground">
@@ -605,70 +642,6 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
         </div>
       </section>
 
-      {/* Reviews Section */}
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">User Reviews</h2>
-            <p className="text-xl text-muted-foreground">What creators are saying</p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            <Card className="border-2">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-2xl">
-                    👨‍🎨
-                  </div>
-                  <div>
-                    <div className="font-semibold">AIArtistPro</div>
-                    <div className="text-sm text-muted-foreground">Digital Creator</div>
-                  </div>
-                </div>
-                <p className="text-muted-foreground">
-                  "This editor completely changed my workflow. The character consistency is incredible - miles ahead of
-                  Flux Kontext!"
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-2">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-2xl">
-                    👩‍💼
-                  </div>
-                  <div>
-                    <div className="font-semibold">ContentCreator</div>
-                    <div className="text-sm text-muted-foreground">UGC Specialist</div>
-                  </div>
-                </div>
-                <p className="text-muted-foreground">
-                  "Creating consistent AI influencers has never been easier. It maintains perfect face details across
-                  edits!"
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-2">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-2xl">
-                    📸
-                  </div>
-                  <div>
-                    <div className="font-semibold">PhotoEditor</div>
-                    <div className="text-sm text-muted-foreground">Professional Editor</div>
-                  </div>
-                </div>
-                <p className="text-muted-foreground">
-                  "One-shot editing is basically solved with this tool. The scene blending is so natural and realistic!"
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
 
       {/* FAQ Section */}
       <section className="py-20 bg-accent/30">
@@ -752,6 +725,32 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
         </div>
       </section>
 
+      {/* CTA Section */}
+      <section className="py-20 bg-gradient-to-r from-primary/10 to-primary/5">
+        <div className="container mx-auto px-4">
+          <div className="text-center max-w-3xl mx-auto">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6">Ready to Create Amazing Images?</h2>
+            <p className="text-xl text-muted-foreground mb-8">
+              Get started with free credits and unlock the full power of AI image editing
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8" asChild>
+                <a href="/pricing">
+                  <Sparkles className="mr-2 h-5 w-5" />
+                  Get Credits
+                </a>
+              </Button>
+              <Button size="lg" variant="outline" className="text-lg px-8 bg-transparent" asChild>
+                <a href="#generator">Try Free</a>
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground mt-6">
+              Credits never expire • Use at your own pace • Cancel anytime
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
       <footer className="border-t border-border py-12 bg-accent/20">
         <div className="container mx-auto px-4">
@@ -761,6 +760,9 @@ export function HomePageContent({ initialUser, isSupabaseConfigured }: HomePageC
               <span className="text-xl font-bold">Nano Banana</span>
             </div>
             <div className="text-center md:text-right">
+              <p className="text-xs text-muted-foreground mb-2">
+                Nano Banana is an independent product and is not affiliated with Google, OpenAI, or any other AI model providers.
+              </p>
               <p className="text-sm text-muted-foreground">
                 © 2026 Nano Banana. AI-powered image editing for everyone.
               </p>

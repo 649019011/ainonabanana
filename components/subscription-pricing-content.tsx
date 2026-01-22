@@ -1,140 +1,82 @@
 'use client'
 
-import { useState } from 'react'
-import { Check, Loader2, Info } from 'lucide-react'
+/**
+ * 订阅制定价页面组件
+ *
+ * 参考：https://imgeditor.co/pricing
+ */
+
+import { useState, useEffect } from 'react'
+import { Check, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { AuthButton } from '@/components/auth-button'
 import { useToast } from '@/hooks/use-toast'
 import type { User } from '@supabase/supabase-js'
-import { PAYPAL_CREDITS_PACKS, type CreditsPackId } from '@/lib/paypal/config'
+import { SUBSCRIPTION_PLANS, type SubscriptionPlanId, type BillingCycle, getPlanPrice, getPlanCredits } from '@/lib/subscription/config'
 
-interface PricingPageContentProps {
+interface SubscriptionPricingContentProps {
   initialUser: User | null
   isSupabaseConfigured: boolean
   isPayPalConfigured: boolean
 }
 
-interface CreditsPack {
-  id: CreditsPackId
-  name: string
-  credits: number
-  price: number
-  description: string
-  popular?: boolean
-  bestValue?: boolean
-  images: number
-  features: string[]
-}
-
-// 将 PayPal 配置转换为 UI 格式
-const creditsPacks: CreditsPack[] = [
-  {
-    id: 'small',
-    name: PAYPAL_CREDITS_PACKS.small.name,
-    credits: PAYPAL_CREDITS_PACKS.small.credits,
-    price: PAYPAL_CREDITS_PACKS.small.price,
-    description: PAYPAL_CREDITS_PACKS.small.description,
-    images: 250,
-    features: [
-      '250 high-quality images',
-      'Pay-as-you-go, no expiry',
-      'All style templates included',
-      'Standard generation speed',
-      'JPG/PNG format downloads',
-      'Commercial Use License',
-    ],
-  },
-  {
-    id: 'medium',
-    name: PAYPAL_CREDITS_PACKS.medium.name,
-    credits: PAYPAL_CREDITS_PACKS.medium.credits,
-    price: PAYPAL_CREDITS_PACKS.medium.price,
-    description: PAYPAL_CREDITS_PACKS.medium.description,
-    popular: true,
-    images: 1000,
-    features: [
-      '1000 high-quality images',
-      'Pay-as-you-go, no expiry',
-      'All style templates included',
-      'Standard generation speed',
-      'JPG/PNG format downloads',
-      'Commercial Use License',
-    ],
-  },
-  {
-    id: 'large',
-    name: PAYPAL_CREDITS_PACKS.large.name,
-    credits: PAYPAL_CREDITS_PACKS.large.credits,
-    price: PAYPAL_CREDITS_PACKS.large.price,
-    description: PAYPAL_CREDITS_PACKS.large.description,
-    images: 5000,
-    features: [
-      '5000 high-quality images',
-      'Pay-as-you-go, no expiry',
-      'Support Seedream-4 Model',
-      'Support Nanobanana-Pro Model',
-      'All style templates included',
-      'Priority generation queue',
-      'JPG/PNG/WebP format downloads',
-      'Batch generation feature',
-      'Commercial Use License',
-    ],
-  },
-  {
-    id: 'ultra',
-    name: PAYPAL_CREDITS_PACKS.ultra.name,
-    credits: PAYPAL_CREDITS_PACKS.ultra.credits,
-    price: PAYPAL_CREDITS_PACKS.ultra.price,
-    description: PAYPAL_CREDITS_PACKS.ultra.description,
-    bestValue: true,
-    images: 25000,
-    features: [
-      '25000 high-quality images',
-      'Best value - $0.016/image',
-      'Pay-as-you-go, no expiry',
-      'Support Seedream-4 Model',
-      'Support Nanobanana-Pro Model',
-      'All style templates included',
-      'Fastest generation speed',
-      'All format downloads',
-      'Batch generation feature',
-      'Commercial Use License',
-    ],
-  },
-]
+// 从环境变量获取 PayPal Client ID
+const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || ''
 
 const faqs = [
   {
     question: 'What are credits and how do they work?',
-    answer: '2 credits generate 1 high-quality image. Simply purchase a credits pack and use them whenever you need. Credits never expire - use them at your own pace.',
+    answer: '2 credits generate 1 high-quality image. Credits are automatically refilled at the start of each billing cycle - monthly for monthly plans, all at once for yearly plans.',
   },
   {
-    question: 'Do unused credits expire?',
-    answer: 'No! Your purchased credits never expire. You can use them whenever you want, without any time pressure. This is different from subscription plans where unused credits are lost each month.',
+    question: 'Can I change my plan anytime?',
+    answer: 'Yes, you can upgrade or downgrade your plan at any time. Upgrades take effect immediately, while downgrades take effect at the next billing cycle.',
+  },
+  {
+    question: 'Do unused credits roll over?',
+    answer: 'Monthly plan credits do not roll over to the next month. Yearly plan credits are valid for the entire subscription period. We recommend choosing a plan based on your actual usage needs.',
   },
   {
     question: 'What payment methods are supported?',
-    answer: 'We accept PayPal payments, including credit cards, debit cards, and PayPal balance. All payments are processed securely through PayPal.',
-  },
-  {
-    question: 'Can I purchase multiple packs?',
-    answer: 'Yes! You can purchase multiple credit packs. Your credits will accumulate in your account, giving you even more flexibility for your creative projects.',
+    answer: 'We support credit cards, debit cards, Alipay, WeChat Pay, and various other payment methods. All payments are processed through secure third-party payment platforms.',
   },
 ]
 
-export function PricingPageContent({ initialUser, isSupabaseConfigured, isPayPalConfigured }: PricingPageContentProps) {
+export function SubscriptionPricingContent({
+  initialUser,
+  isSupabaseConfigured,
+  isPayPalConfigured,
+}: SubscriptionPricingContentProps) {
   const { toast } = useToast()
-  const [processingPack, setProcessingPack] = useState<CreditsPackId | null>(null)
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>('yearly')
+  const [processingPlan, setProcessingPlan] = useState<SubscriptionPlanId | null>(null)
+  const [paypalLoaded, setPaypalLoaded] = useState(false)
 
-  const handlePurchase = async (packId: CreditsPackId) => {
+  // 动态加载 PayPal SDK
+  useEffect(() => {
+    if (PAYPAL_CLIENT_ID && !paypalLoaded) {
+      const script = document.createElement('script')
+      script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&vault=true`
+      script.addEventListener('load', () => setPaypalLoaded(true))
+      document.body.appendChild(script)
+
+      return () => {
+        if (document.body.contains(script)) {
+          document.body.removeChild(script)
+        }
+      }
+    }
+  }, [paypalLoaded])
+
+  const handleSubscribe = async (planId: SubscriptionPlanId) => {
     // 如果用户未登录，提示先登录
     if (!initialUser) {
       toast({
         variant: 'destructive',
         title: 'Please login first',
-        description: 'You need to login before purchasing credits',
+        description: 'You need to login before subscribing',
       })
       return
     }
@@ -148,20 +90,18 @@ export function PricingPageContent({ initialUser, isSupabaseConfigured, isPayPal
       return
     }
 
-    setProcessingPack(packId)
+    setProcessingPlan(planId)
 
     try {
-      // 调试日志
-      console.log('Purchasing pack:', packId, 'User:', initialUser)
-
-      // 调用 PayPal 订单创建 API
-      const response = await fetch('/api/paypal/create-order', {
+      // 调用订阅 API 创建订单
+      const response = await fetch('/api/subscription/create-order', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          packId,
+          planId,
+          billingCycle,
           userId: initialUser.id,
           userEmail: initialUser.email,
         }),
@@ -170,27 +110,24 @@ export function PricingPageContent({ initialUser, isSupabaseConfigured, isPayPal
       const data = await response.json()
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to create PayPal order')
+        throw new Error(data.error || 'Failed to create subscription order')
       }
 
-      // 重定向到 PayPal 支付页面
-      // PayPal 返回的批准链接已包含正确的返回 URL
-      const approvalUrl = data.approveUrl
-
-      // 保存 packId 到 sessionStorage，用于支付成功后处理
-      sessionStorage.setItem('pendingPackId', packId)
+      // 保存信息到 sessionStorage
+      sessionStorage.setItem('pendingPlanId', planId)
+      sessionStorage.setItem('pendingBillingCycle', billingCycle)
       sessionStorage.setItem('pendingOrderId', data.orderId)
 
       // 重定向到 PayPal
-      window.location.href = approvalUrl
+      window.location.href = data.approveUrl
     } catch (error) {
-      console.error('Purchase error:', error)
+      console.error('Subscription error:', error)
       toast({
         variant: 'destructive',
-        title: 'Purchase failed',
+        title: 'Subscription failed',
         description: error instanceof Error ? error.message : 'Please try again later',
       })
-      setProcessingPack(null)
+      setProcessingPlan(null)
     }
   }
 
@@ -223,26 +160,37 @@ export function PricingPageContent({ initialUser, isSupabaseConfigured, isPayPal
             <p className="text-sm text-muted-foreground mb-4">NanoBanana is an independent product and is not affiliated with Google or other AI model providers. We provide access to AI models through our custom interface.</p>
 
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-accent rounded-full border border-border mb-6">
-              <Info className="h-4 w-4" />
-              <span className="font-semibold">New:</span>
-              <span>Credits Never Expire - Use at Your Own Pace</span>
+              <span className="font-semibold">🍌 Limited Time:</span>
+              <span>Save 20% with Annual Billing</span>
             </div>
 
-            <h2 className="text-4xl md:text-5xl font-bold mb-4">Purchase Credits</h2>
-            <p className="text-xl text-muted-foreground">Pay-as-you-go, no subscriptions required</p>
-          </div>
-        </div>
-      </section>
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">Choose Your Perfect Plan</h2>
+            <p className="text-xl text-muted-foreground">Unlimited creativity starts here</p>
 
-      {/* Pricing Info */}
-      <section className="pb-8">
-        <div className="container mx-auto px-4">
-          <div className="text-center max-w-2xl mx-auto">
-            <p className="text-muted-foreground">
-              Each image generation uses <span className="font-semibold text-foreground">2 credits</span>.{' '}
-              Credits are added to your account immediately after purchase and{' '}
-              <span className="font-semibold text-foreground">never expire</span>.
-            </p>
+            {/* Billing Toggle */}
+            <div className="mt-8 flex items-center justify-center gap-4">
+              <button
+                className={`px-6 py-2 rounded-full font-semibold transition-colors ${
+                  billingCycle === 'monthly'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                }`}
+                onClick={() => setBillingCycle('monthly')}
+              >
+                Monthly
+              </button>
+              <button
+                className={`px-6 py-2 rounded-full font-semibold transition-colors ${
+                  billingCycle === 'yearly'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                }`}
+                onClick={() => setBillingCycle('yearly')}
+              >
+                Yearly
+                <span className="ml-2 text-xs bg-primary-foreground/20 px-2 py-1 rounded">Save 20%</span>
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -250,25 +198,30 @@ export function PricingPageContent({ initialUser, isSupabaseConfigured, isPayPal
       {/* Pricing Cards */}
       <section className="pb-20">
         <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
-            {creditsPacks.map((pack) => {
-              const pricePerImage = (pack.price / pack.images).toFixed(3)
+          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {Object.values(SUBSCRIPTION_PLANS).map((plan) => {
+              const planId = plan.id as SubscriptionPlanId
+              const price = billingCycle === 'monthly' ? plan.monthly.price : plan.yearly.price
+              const originalPrice = billingCycle === 'monthly' ? plan.monthly.originalPrice : plan.yearly.originalPrice
+              const credits = billingCycle === 'monthly' ? plan.monthly.credits : plan.yearly.credits
+              const discount = billingCycle === 'monthly' ? 0 : plan.yearly.discount
+              const hasDiscount = discount > 0
 
               return (
                 <Card
-                  key={pack.id}
+                  key={planId}
                   className={`relative border-2 transition-all hover:shadow-lg ${
-                    pack.popular ? 'border-primary scale-105' : pack.bestValue ? 'border-primary scale-105' : 'border-border'
+                    plan.popular || plan.bestValue ? 'border-primary scale-105' : 'border-border'
                   }`}
                 >
-                  {pack.popular && (
+                  {plan.popular && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                       <span className="bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
                         Most Popular
                       </span>
                     </div>
                   )}
-                  {pack.bestValue && (
+                  {plan.bestValue && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                       <span className="bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
                         Best Value
@@ -278,28 +231,38 @@ export function PricingPageContent({ initialUser, isSupabaseConfigured, isPayPal
 
                   <CardContent className="p-6">
                     <div className="text-center mb-6">
-                      <h3 className="text-xl font-bold mb-2">{pack.name}</h3>
-                      <p className="text-sm text-muted-foreground mb-4">{pack.description}</p>
+                      <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
+                      <p className="text-sm text-muted-foreground mb-4">{plan.description}</p>
 
+                      {/* Price Display */}
                       <div className="mb-2">
+                        {hasDiscount && (
+                          <div className="text-sm text-muted-foreground line-through mb-1">
+                            ${originalPrice.toFixed(2)}/{billingCycle === 'monthly' ? 'mo' : 'year'}
+                          </div>
+                        )}
                         <div className="flex items-baseline justify-center gap-1">
                           <span className="text-4xl font-bold">
-                            ${pack.price.toFixed(2)}
+                            ${price.toFixed(2)}
                           </span>
+                          <span className="text-muted-foreground">/{billingCycle === 'monthly' ? 'mo' : 'year'}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          ${pricePerImage} per image
-                        </p>
+                        {hasDiscount && (
+                          <p className="text-xs text-green-600 font-semibold mt-1">
+                            ⚡ SAVE {discount}%
+                          </p>
+                        )}
                       </div>
 
+                      {/* Credits Display */}
                       <div className="inline-flex items-center gap-1 px-3 py-1 bg-accent rounded-full border border-border mb-3">
                         <span className="text-sm font-semibold text-primary">
-                          {pack.credits.toLocaleString()} credits
+                          {credits.toLocaleString()} credits/{billingCycle === 'monthly' ? 'year' : 'year'}
                         </span>
                       </div>
 
                       <p className="text-xs text-muted-foreground">
-                        {pack.images.toLocaleString()} images
+                        ~{plan.imagesPerMonth} images/month
                       </p>
                     </div>
 
@@ -311,27 +274,24 @@ export function PricingPageContent({ initialUser, isSupabaseConfigured, isPayPal
 
                     <Button
                       className={`w-full mb-6 ${
-                        pack.popular || pack.bestValue
+                        plan.popular || plan.bestValue
                           ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                           : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
                       }`}
-                      onClick={() => handlePurchase(pack.id)}
-                      disabled={processingPack === pack.id || !initialUser}
+                      onClick={() => handleSubscribe(planId)}
+                      disabled={processingPlan === planId || !initialUser}
                     >
-                      {processingPack === pack.id ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Processing...
-                        </>
+                      {processingPlan === planId ? (
+                        <>Processing...</>
                       ) : !initialUser ? (
-                        'Login to Purchase'
+                        'Login to Subscribe'
                       ) : (
-                        'Buy Now'
+                        'Get Started'
                       )}
                     </Button>
 
                     <ul className="space-y-3">
-                      {pack.features.map((feature, index) => (
+                      {plan.features.map((feature, index) => (
                         <li key={index} className="flex items-start gap-2 text-sm">
                           <Check className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                           <span>{feature}</span>

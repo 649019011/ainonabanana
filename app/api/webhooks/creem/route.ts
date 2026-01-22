@@ -5,8 +5,61 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getCreemApiKey } from '@/lib/creem/config'
+import { addCredits } from '@/lib/credits/db'
 import crypto from 'crypto'
+
+/**
+ * Creem Webhook 事件数据结构
+ */
+interface CreemWebhookData {
+  checkout?: {
+    id: string
+    product: string
+    metadata?: Record<string, string | number>
+    customer?: string
+  }
+  subscription?: {
+    id: string
+    product: string
+    status: string
+    metadata?: Record<string, string | number>
+    customer?: string
+  }
+  order?: {
+    id: string
+    amount: number
+    product: string
+    metadata?: Record<string, string | number>
+  }
+}
+
+/**
+ * 计划 credits 配置
+ */
+const PLAN_CREDITS: Record<string, { monthly: number; yearly: number }> = {
+  basic: { monthly: 150, yearly: 1800 },
+  pro: { monthly: 800, yearly: 9600 },
+  max: { monthly: 4600, yearly: 55200 },
+}
+
+/**
+ * 从产品 ID 或 metadata 中提取计划信息
+ */
+function extractPlanInfo(metadata?: Record<string, string | number>): {
+  planId: string
+  billingPeriod: 'monthly' | 'yearly'
+} | null {
+  if (!metadata) return null
+
+  const planId = metadata.planId as string
+  const billingPeriod = metadata.billingPeriod as 'monthly' | 'yearly'
+
+  if (planId && (billingPeriod === 'monthly' || billingPeriod === 'yearly')) {
+    return { planId, billingPeriod }
+  }
+
+  return null
+}
 
 /**
  * 验证 Webhook 签名
@@ -53,7 +106,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 解析 webhook 数据
-    let webhookData
+    let webhookData: { event: string; data: CreemWebhookData }
     try {
       webhookData = JSON.parse(rawBody)
     } catch {
@@ -104,32 +157,113 @@ export async function POST(request: NextRequest) {
 /**
  * 处理 checkout.completed 事件
  */
-async function handleCheckoutCompleted(data: unknown): Promise<void> {
+async function handleCheckoutCompleted(data: CreemWebhookData): Promise<void> {
   console.log('Checkout completed:', data)
-  // TODO: 根据你的业务逻辑处理支付完成后的操作
-  // 例如：更新用户订阅状态、发送确认邮件等
+
+  const checkout = data.checkout
+  if (!checkout) return
+
+  const planInfo = extractPlanInfo(checkout.metadata)
+  if (!planInfo) {
+    console.warn('No plan info found in checkout metadata')
+    return
+  }
+
+  const userId = checkout.metadata?.userId as string
+  if (!userId) {
+    console.warn('No userId found in checkout metadata')
+    return
+  }
+
+  // 计算要添加的 credits
+  const creditsConfig = PLAN_CREDITS[planInfo.planId]
+  if (!creditsConfig) {
+    console.warn(`Unknown plan ID: ${planInfo.planId}`)
+    return
+  }
+
+  const creditsToAdd = creditsConfig[planInfo.billingPeriod]
+
+  // 添加 credits
+  const result = await addCredits(userId, creditsToAdd, 'purchase', {
+    referenceId: checkout.id,
+    description: `${planInfo.planId} plan (${planInfo.billingPeriod})`,
+    packId: `${planInfo.planId}_${planInfo.billingPeriod}`,
+    metadata: {
+      planId: planInfo.planId,
+      billingPeriod: planInfo.billingPeriod,
+      checkoutId: checkout.id,
+    },
+  })
+
+  if (result.success) {
+    console.log(`Successfully added ${creditsToAdd} credits to user ${userId}`)
+  } else {
+    console.error(`Failed to add credits: ${result.error}`)
+  }
 }
 
 /**
  * 处理 subscription.created 事件
  */
-async function handleSubscriptionCreated(data: unknown): Promise<void> {
+async function handleSubscriptionCreated(data: CreemWebhookData): Promise<void> {
   console.log('Subscription created:', data)
-  // TODO: 处理订阅创建
+  // 订阅创建时不需要添加 credits，会在 order.paid 或 checkout.completed 时添加
 }
 
 /**
  * 处理 subscription.cancelled 事件
  */
-async function handleSubscriptionCancelled(data: unknown): Promise<void> {
+async function handleSubscriptionCancelled(data: CreemWebhookData): Promise<void> {
   console.log('Subscription cancelled:', data)
-  // TODO: 处理订阅取消
+  // TODO: 处理订阅取消，例如降低用户权限、发送通知等
 }
 
 /**
  * 处理 order.paid 事件
  */
-async function handleOrderPaid(data: unknown): Promise<void> {
+async function handleOrderPaid(data: CreemWebhookData): Promise<void> {
   console.log('Order paid:', data)
-  // TODO: 处理订单支付
+
+  const order = data.order
+  if (!order) return
+
+  const planInfo = extractPlanInfo(order.metadata)
+  if (!planInfo) {
+    console.warn('No plan info found in order metadata')
+    return
+  }
+
+  const userId = order.metadata?.userId as string
+  if (!userId) {
+    console.warn('No userId found in order metadata')
+    return
+  }
+
+  // 计算要添加的 credits
+  const creditsConfig = PLAN_CREDITS[planInfo.planId]
+  if (!creditsConfig) {
+    console.warn(`Unknown plan ID: ${planInfo.planId}`)
+    return
+  }
+
+  const creditsToAdd = creditsConfig[planInfo.billingPeriod]
+
+  // 添加 credits
+  const result = await addCredits(userId, creditsToAdd, 'purchase', {
+    referenceId: order.id,
+    description: `${planInfo.planId} plan (${planInfo.billingPeriod})`,
+    packId: `${planInfo.planId}_${planInfo.billingPeriod}`,
+    metadata: {
+      planId: planInfo.planId,
+      billingPeriod: planInfo.billingPeriod,
+      orderId: order.id,
+    },
+  })
+
+  if (result.success) {
+    console.log(`Successfully added ${creditsToAdd} credits to user ${userId}`)
+  } else {
+    console.error(`Failed to add credits: ${result.error}`)
+  }
 }

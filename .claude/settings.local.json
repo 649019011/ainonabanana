@@ -30,7 +30,21 @@
       "Bash(start http://localhost:3000/pricing)",
       "Bash(curl:*)",
       "Bash(powershell -Command \"Stop-Process -Id 44876 -Force\")",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(timeout:*)",
+      "Bash(ping:*)",
+      "Bash(cmd //c \"taskkill /PID 22716 /F\")",
+      "Bash(cmd //c \"taskkill /PID 54684 /F\")",
+      "Bash(cmd //c \"taskkill /PID 23092 /F\")",
+      "Bash(powershell -Command \"Stop-Process -Id 30524 -Force\")",
+      "Bash(npm run dev:*)",
+      "Bash(start http://localhost:3001/subscription-pricing)",
+      "Bash(del:*)",
+      "Bash(start http://localhost:3003/subscription-pricing)",
+      "Bash(start http://localhost:3000/subscription-pricing)",
+      "Bash(npx supabase:*)",
+      "Bash(wc:*)",
+      "Bash(git reset:*)"
     ]
   }
 }

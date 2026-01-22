@@ -25,11 +25,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     ;({ packId, userId } = body)
 
+    console.log('PayPal create-order request:', { packId, userId, body })
+
     // 验证必需参数
     if (!packId) {
       return NextResponse.json(
         { error: 'Missing required parameter: packId' },
         { status: 400 }
+      )
+    }
+
+    // 验证用户 ID（必需）
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Missing required parameter: userId. Please login first.' },
+        { status: 401 }
       )
     }
 
@@ -59,15 +69,30 @@ export async function POST(request: NextRequest) {
           },
         },
       ],
+      // 添加返回 URL
+      application_context: {
+        return_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/payment/return`,
+        cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/pricing`,
+        brand_name: 'Nano Banana',
+        user_action: 'PAY_NOW',
+        landing_page: 'BILLING',
+      },
     }
 
     // 创建 PayPal 订单
     const orderResponse = await createPayPalOrder(orderRequest)
 
-    // 返回订单 ID
+    // 从响应中获取批准链接
+    const approveLink = orderResponse.links.find((link) => link.rel === 'approve')
+    if (!approveLink) {
+      throw new Error('No approve link found in PayPal order response')
+    }
+
+    // 返回订单 ID 和批准链接
     return NextResponse.json({
       success: true,
       orderId: orderResponse.id,
+      approveUrl: approveLink.href,
       packId,
       credits: packConfig.credits,
       amount: packConfig.price,

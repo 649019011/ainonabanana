@@ -26,3 +26,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .vercel
+
+# temp files
+tmpclaude-*
+nul
+
+# supabase temp
+supabase/.temp/

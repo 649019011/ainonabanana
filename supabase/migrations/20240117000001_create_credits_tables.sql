@@ -87,18 +87,20 @@ CREATE POLICY "Users can insert own transactions"
   WITH CHECK (auth.uid() = user_id);
 
 -- 创建服务端角色策略（用于 API 后端操作）
--- 允许服务端通过 service_role_key 操作所有数据
-DROP POLICY IF EXISTS "Service role can manage all credits" ON public.user_credits;
-CREATE POLICY "Service role can manage all credits"
-  ON public.user_credits
-  FOR ALL
-  USING (pg_role.current_setting('request.jwt.claims', true)::jsonb->>'role' = 'service_role');
+-- 注意：使用 service_role key 的客户端会绕过 RLS，不需要额外策略
+-- 如果需要允许服务端通过 anon key 操作，可以使用以下策略：
 
-DROP POLICY IF EXISTS "Service role can manage all transactions" ON public.credit_transactions;
-CREATE POLICY "Service role can manage all transactions"
-  ON public.credit_transactions
-  FOR ALL
-  USING (pg_role.current_setting('request.jwt.claims', true)::jsonb->>'role' = 'service_role');
+-- DROP POLICY IF EXISTS "Service role can manage all credits" ON public.user_credits;
+-- CREATE POLICY "Service role can manage all credits"
+--   ON public.user_credits
+--   FOR ALL
+--   USING (true);
+
+-- DROP POLICY IF EXISTS "Service role can manage all transactions" ON public.credit_transactions;
+-- CREATE POLICY "Service role can manage all transactions"
+--   ON public.credit_transactions
+--   FOR ALL
+--   USING (true);
 
 -- 创建辅助函数：获取用户余额
 CREATE OR REPLACE FUNCTION public.get_user_balance(p_user_id UUID)
@@ -129,6 +131,7 @@ RETURNS TABLE(id UUID, balance INTEGER) AS $$
 DECLARE
   v_new_balance INTEGER;
   v_transaction_id UUID;
+  v_existing_user_id UUID;
 BEGIN
   -- 检查参数
   IF p_amount <= 0 THEN
@@ -138,13 +141,24 @@ BEGIN
   -- 锁定用户记录以防止并发问题
   LOCK TABLE public.user_credits IN SHARE ROW EXCLUSIVE MODE;
 
-  -- 获取或创建用户 credits 记录
-  INSERT INTO public.user_credits (user_id, balance)
-  VALUES (p_user_id, p_amount)
-  ON CONFLICT (user_id) DO UPDATE
-  SET balance = public.user_credits.balance + p_amount,
-      updated_at = NOW()
-  RETURNING balance INTO v_new_balance;
+  -- 检查用户是否已存在
+  SELECT user_id INTO v_existing_user_id
+  FROM public.user_credits
+  WHERE user_id = p_user_id;
+
+  IF v_existing_user_id IS NULL THEN
+    -- 创建新用户记录
+    INSERT INTO public.user_credits (user_id, balance)
+    VALUES (p_user_id, p_amount)
+    RETURNING balance INTO v_new_balance;
+  ELSE
+    -- 更新现有用户记录
+    UPDATE public.user_credits
+    SET balance = balance + p_amount,
+        updated_at = NOW()
+    WHERE user_id = p_user_id
+    RETURNING balance INTO v_new_balance;
+  END IF;
 
   -- 创建交易记录
   INSERT INTO public.credit_transactions (

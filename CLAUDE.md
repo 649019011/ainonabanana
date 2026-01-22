@@ -15,6 +15,8 @@
 - shadcn/ui 设计模式
 - Vercel Analytics 集成
 - Supabase 服务器端认证（Google OAuth）
+- PayPal 支付集成（一次性购买 credits 包）
+- Credits 系统（用户余额和交易管理）
 
 ## 开发命令
 
@@ -98,7 +100,12 @@ OPENROUTER_API_KEY=your-openrouter-key
 OPENROUTER_SITE_URL=http://localhost:3000  # 或生产环境 URL
 OPENROUTER_SITE_NAME=Nano Banana
 
-# Creem 支付
+# PayPal 支付
+NEXT_PUBLIC_PAYPAL_CLIENT_ID=your_PayPal_Client_ID
+PAYPAL_CLIENT_SECRET=your_PayPal_Client_Secret
+PAYPAL_MODE=sandbox  # sandbox（测试）或 live（生产）
+
+# Creem 支付（保留但已弃用，使用 PayPal 替代）
 CREEM_API_KEY=your_creem_api_key_here
 CREEM_API_URL=https://api.creem.io/v1
 CREEM_WEBHOOK_SECRET=your_webhook_secret_here
@@ -110,7 +117,7 @@ CREEM_PRODUCT_MAX_MONTHLY=prod_xxx_max_monthly
 CREEM_PRODUCT_MAX_YEARLY=prod_xxx_max_yearly
 ```
 
-详细配置说明见 `AUTH_SETUP.md` 和 `CREEM_SETUP.md`。
+详细配置说明见 `AUTH_SETUP.md`、`PAYPAL_SETUP.md` 和 `CREDITS_SETUP.md`。
 
 ## 图像生成架构
 
@@ -119,7 +126,7 @@ CREEM_PRODUCT_MAX_YEARLY=prod_xxx_max_yearly
 ### 图像生成流程
 
 ```
-用户上传图片 → 前端压缩并转 base64 → POST /api/generate → OpenRouter API → Gemini 2.5 Flash → 返回图片 URL → 展示在 Output Gallery
+用户上传图片 → 前端压缩并转 base64 → 检查 credits 余额 → 扣除 2 credits → POST /api/generate → OpenRouter API → Gemini 2.5 Flash → 返回图片 URL → 展示在 Output Gallery
 ```
 
 ### API 路由（app/api/generate/route.ts）
@@ -129,35 +136,47 @@ CREEM_PRODUCT_MAX_YEARLY=prod_xxx_max_yearly
 - 从复杂的响应结构中提取图片 URL
 - 支持多种响应格式：data URL、HTTP URL、base64 等
 
-### 前端处理（app/page.tsx）
+### 前端处理（components/home-page-content.tsx）
 
 - 图片上传时自动压缩：最大 2048px 边长，JPEG 0.92 质量
 - 支持 10MB 以内的图片文件
+- 生成前检查用户 credits 余额（需要 2 credits）
 - 生成结果存储在本地 state 中，展示在 Output Gallery
 
 ## 目录结构
 
 - `app/` - Next.js App Router 页面
   - `layout.tsx` - 根布局，包含字体（Geist、Geist Mono）和 Analytics
-  - `page.tsx` - 主落地页（客户端组件，含图片上传 UI）
-  - `pricing/page.tsx` - Pricing 页面
+  - `page.tsx` - 主落地页（服务器组件，渲染 home-page-content）
+  - `pricing/page.tsx` - Pricing 页面（购买 credits 包）
+  - `api-docs/page.tsx` - API 文档页面
+  - `quick-start/page.tsx` - 快速入门指南页面
+  - `payment/return/page.tsx` - PayPal 支付返回页面
   - `globals.css` - Tailwind v4 导入和主题 CSS 自定义属性
   - `auth/` - 认证路由（signin、callback、signout）
   - `api/generate/` - 图像生成 API 路由，使用 OpenRouter 调用 Gemini 2.5 Flash
-  - `api/checkout/` - Creem 支付会话创建 API
-  - `api/webhooks/creem/` - Creem webhook 处理
+  - `api/paypal/create-order/` - PayPal 创建订单 API
+  - `api/paypal/capture-order/` - PayPal 捕获支付 API
+  - `api/credits/balance/` - 获取用户 credits 余额 API
+  - `api/credits/deduct/` - 扣除 credits API
+  - `api/credits/transactions/` - 获取交易历史 API
+  - `api/checkout/` - Creem 支付会话创建 API（已弃用）
+  - `api/webhooks/creem/` - Creem webhook 处理（已弃用）
 
 - `components/` - React 组件
   - `ui/` - shadcn/ui/Radix UI 基础组件（60+ 个组件）
   - `theme-provider.tsx` - 主题上下文提供者
   - `auth-button.tsx` - 登录/用户信息组件
+  - `credits-display.tsx` - Credits 余额显示组件
   - `pricing-page-content.tsx` - Pricing 页面客户端组件
   - `home-page-content.tsx` - 主页客户端组件
 
 - `lib/` - 工具函数
   - `utils.ts` - `cn()` 辅助函数，用于合并 Tailwind 类名
-  - `supabase/` - Supabase 认证相关工具
-  - `creem/` - Creem 支付相关工具（config.ts、client.ts）
+  - `supabase/` - Supabase 认证相关工具（config.ts、client.ts、server.ts、middleware.ts）
+  - `paypal/` - PayPal 支付相关工具（config.ts、client.ts）
+  - `credits/` - Credits 系统工具（config.ts、db.ts、client.ts）
+  - `creem/` - Creem 支付相关工具（已弃用，保留用于兼容）
 
 - `hooks/` - 自定义 React hooks
   - `use-mobile.ts` - 移动端检测
@@ -186,65 +205,108 @@ CREEM_PRODUCT_MAX_YEARLY=prod_xxx_max_yearly
 
 `components/ui/` 目录包含遵循 shadcn/ui 约定的预构建 Radix UI 组件。这些组件都有完整的类型定义，可直接使用。常用组件包括 Button、Card、Dialog、Accordion、Input、Textarea、Avatar、DropdownMenu 等。
 
-## Creem 支付架构
+## Credits 系统
 
-本项目使用 Creem 作为支付平台来处理订阅和一次性付款。
+本项目使用 Credits 系统来管理用户的图像生成配额。
+
+### Credits 流程
+
+```
+用户注册 → 获得 10 免费 credits → 生成图像时扣除 2 credits → 余额不足时购买 credits 包 → PayPal 支付成功 → 添加 credits 到账户
+```
+
+### Credits 配置（lib/credits/config.ts）
+
+- `CREDITS_PER_IMAGE = 2` - 每次图像生成消耗 2 credits
+- 新用户注册获得 10 免费 credits
+
+### Credits 相关文件
+
+**Credits 工具（lib/credits/）：**
+- `config.ts` - Credits 系统配置和类型定义
+- `db.ts` - 数据库操作函数（getOrCreateUserCredits、addCredits、deductCredits）
+- `client.ts` - 客户端 API 调用函数
+
+**API 路由：**
+- `app/api/credits/balance/route.ts` - 获取用户 credits 余额
+- `app/api/credits/deduct/route.ts` - 扣除 credits（用于图像生成）
+- `app/api/credits/transactions/route.ts` - 获取用户交易历史
+
+### 数据库表
+
+- `user_credits` - 存储用户 credits 余额
+- `credit_transactions` - 记录所有 credits 交易（purchase/usage/refund/bonus）
+
+详细配置说明见 `CREDITS_SETUP.md`。
+
+## PayPal 支付架构
+
+本项目使用 PayPal 进行一次性付款，用户可以购买不同大小的 credits 包。
 
 ### 支付流程
 
 ```
-用户选择套餐 → POST /api/checkout → Creem API → 返回 checkout_url → 重定向到 Creem 支付页面 → 支付成功 → webhook 回调 → /api/webhooks/creem
+用户点击 "Buy Now" → 调用 /api/paypal/create-order → 返回 PayPal Order ID → 使用 PayPal JS SDK 打开支付窗口 → 用户完成支付 → 调用 /api/paypal/capture-order → 添加 credits 到账户
 ```
 
-### Creem 相关文件
+### PayPal 相关文件
 
-**Creem 客户端工具（lib/creem/）：**
-- `config.ts` - 从环境变量读取 `CREEM_API_KEY` 和产品 ID 映射
-- `client.ts` - Creem API 客户端，包含 `createCheckoutSession` 和 `getCheckoutSession` 函数
+**PayPal 客户端工具（lib/paypal/）：**
+- `config.ts` - 从环境变量读取 PayPal API 密钥和 credits 包配置
+- `client.ts` - PayPal API 客户端，包含 `createPayPalOrder` 和 `capturePayPalOrder` 函数
 
 **API 路由：**
-- `app/api/checkout/route.ts` - 创建支付会话，返回 Creem checkout URL
-- `app/api/webhooks/creem/route.ts` - 处理 Creem webhook 回调（支付完成、订阅创建等）
+- `app/api/paypal/create-order/route.ts` - 创建 PayPal 订单
+- `app/api/paypal/capture-order/route.ts` - 捕获 PayPal 支付并添加 credits
 
-### 使用支付功能
+### Credits 包配置
 
-**创建支付会话：**
-```typescript
-// 前端调用
-const response = await fetch('/api/checkout', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    planId: 'basic|pro|max',
-    billingPeriod: 'monthly|yearly',
-    userEmail: '[email protected]',
-    metadata: { userId: 'user_123' },
-  }),
-})
+| 包名 | Credits | 价格 | 大约图片数 |
+|------|---------|------|------------|
+| Starter Pack | 500 | $9.99 | ~250 |
+| Standard Pack | 2,000 | $29.99 | ~1,000 |
+| Pro Pack | 10,000 | $99.99 | ~5,000 |
+| Ultimate Pack | 50,000 | $399.99 | ~25,000 |
 
-const data = await response.json()
-// data.checkoutUrl - Creem 支付页面 URL
-// data.checkoutId - Checkout 会话 ID
-```
+详细配置说明见 `PAYPAL_SETUP.md`。
 
-**Webhook 事件处理：**
-- `checkout.completed` - 支付完成
-- `subscription.created` - 订阅创建
-- `subscription.cancelled` - 订阅取消
-- `order.paid` - 订单支付成功
+## Creem 支付架构（已弃用）
 
-详细配置说明见 `CREEM_SETUP.md`。
+项目之前使用 Creem 作为支付平台，现已迁移到 PayPal。相关文件已保留但不再使用。
 
-## Pricing 页面
+### 已弃用的文件
 
-访问 `/pricing` 可查看定价页面，包含三个套餐：Basic、Pro、Max。
+- `lib/creem/` - Creem 支付相关工具
+- `app/api/checkout/` - Creem 支付会话创建 API
+- `app/api/webhooks/creem/` - Creem webhook 处理
 
-**套餐配置：**
-- Basic: $12/月或 $144/年，1800 credits/年，75 图片/月
-- Pro: $19.50/月或 $234/年，9600 credits/年，400 图片/月
-- Max: $80/月或 $960/年，55200 credits/年，2300 图片/月
+## 其他页面
 
-用户点击 "Get Started" 按钮时：
-1. 检查用户是否登录
-2. 调用 `/api/checkout` 创建支付会话
-3. 重定向到 Creem 支付页面完成支付
+- `/` - 主页，图像生成界面
+- `/pricing` - 定价页面，购买 credits 包
+- `/api-docs` - API 文档页面
+- `/quick-start` - 快速入门指南
+
+## Google 登录调试
+
+如果遇到 `redirect_uri_mismatch` 错误（错误 400），请检查：
+
+1. **Supabase 项目设置中的重定向 URL 配置：**
+   - 登录 Supabase Dashboard
+   - 导航到 Authentication → URL Configuration
+   - 在 Redirect URLs 中添加：
+     - 开发环境：`http://localhost:3000/auth/callback`
+     - 生产环境：`https://your-domain.com/auth/callback`
+
+2. **Google Cloud Console 配置：**
+   - 登录 Google Cloud Console
+   - 导航到 API & Services → Credentials
+   - 找到 OAuth 2.0 客户端 ID
+   - 在 Authorized redirect URIs 中添加：
+     - 开发环境：`https://your-project-ref.supabase.co/auth/v1/callback`
+     - 生产环境：`https://your-project-ref.supabase.co/auth/v1/callback`
+
+3. **调试打印：**
+   查看 `app/auth/signin/route.ts` 和 `app/auth/callback/route.ts` 中的日志输出，确保：
+   - `redirectTo` 参数正确传递
+   - Google OAuth URL 中的 `redirect_uri` 参数与配置一致
