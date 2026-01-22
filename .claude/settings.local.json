@@ -44,7 +44,8 @@
       "Bash(start http://localhost:3000/subscription-pricing)",
       "Bash(npx supabase:*)",
       "Bash(wc:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(npx -y vercel:*)"
     ]
   }
 }
