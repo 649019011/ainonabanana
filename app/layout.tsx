@@ -27,6 +27,9 @@ export const metadata: Metadata = {
     ],
     apple: "/apple-icon.png",
   },
+  alternates: {
+    canonical: "https://www.ainonabanana.shop",
+  },
 }
 
 export default function RootLayout({
